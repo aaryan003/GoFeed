@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,31 +11,39 @@ import (
 )
 
 func main() {
-	fmt.Println("Hello, World!")
 
-	if err := godotenv.Load(".env"); err != nil {
-		log.Printf("No .env file found: %v", err)
+	godotenv.Load()
+
+	portString := os.Getenv("PORT")
+	if portString == "" {
+		log.Fatal("PORT environment variable is not set")
 	}
 
-	r := chi.NewRouter()
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+	router := chi.NewRouter()
+
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"https://*", "http://*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
-		MaxAge:           300,
 	}))
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "Hello from chi")
-	})
+	v1Router := chi.NewRouter()
+	v1Router.Get("/healthz ", handlerReadiness)
+	v1Router.Get("/err", handlerError)
 
-	portString := os.Getenv("PORT")
-	if portString != "" {
-		fmt.Println("Port:", portString)
-		log.Fatal(http.ListenAndServe(":"+portString, r))
+	router.Mount("/v1", v1Router)
+
+	server := &http.Server{
+		Handler: router,
+		Addr:    ":" + portString,
 	}
 
-	log.Fatal("PORT environment variable is not set")
+	log.Printf("Server listening on port %v", portString)
+	err := server.ListenAndServe()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
